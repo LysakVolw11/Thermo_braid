@@ -1,48 +1,62 @@
 #include <SPI.h>
+#include <SD.h>   
 #include "nRF24L01.h"
 #include "RF24.h"
-#include <OneWire.h>  //библиотека работы шины для ds18b20
-#include <DallasTemperature.h> //библиотека для считывания температуры с ds18b20
-   
-const uint64_t pipe = 0xF0F1F2F3F4LL; //идентификатор передачи данных.
-RF24 radio(9, 10); //указываем пины подключения передатчика.
-OneWire  oneWire(2);  //указываем пины для подключения датчиков ds18b20.
-DallasTemperature ds(&oneWire); //активируем библиотеку ds.
-DeviceAddress sensor1 = {0x28, 0x9A, 0xF4, 0x81, 0xE3, 0xD1, 0x3C, 0x2D}; //адрес первого датчика.
-DeviceAddress sensor2 = {0x28, 0xF5, 0xE2, 0x57, 0x4, 0xE1, 0x3C, 0xB2}; //адрес второго датчика.
-DeviceAddress sensor3 = {0x28, 0xE5, 0x9B, 0x57, 0x4, 0xD0, 0x3C, 0x9E};
-DeviceAddress sensor4 = {0x28, 0x14, 0x8A, 0x57, 0x4, 0xE1, 0x3C, 0x83};
-DeviceAddress sensor5 = {0x28, 0x40, 0x26, 0x57, 0x4, 0xE1, 0x3C, 0x63};
+File dataFile;// создаем dataFile
+int time = 0;
+   const int chipSelect = 6; // CS пин для SD
+
+  const uint64_t pipe = 0xF0F1F2F3F4LL; //первый идентификатор передачи данных.
+  RF24 radio(9, 10); //указываем пины подключения передатчика.
 
 void setup(){
   Serial.begin(9600); //открываем пот обмена данными.
-  ds.begin();  //запускаем функцию считывания температуры ds.
   radio.begin(); //делаем инициализацию.
   delay(2); //ждем реакции модуля передачи данных.
   radio.setChannel(120); // канал для передачи данных (0-127).
   radio.setDataRate(RF24_1MBPS); //указываем на какой скорости будут общаться модули.
-  radio.setPALevel(RF24_PA_HIGH); //указываем мощность передатчика. 
-  radio.openWritingPipe(pipe); // открываем трубу на передачу.
+  radio.setPALevel(RF24_PA_HIGH); //указываем мощность передатчика.
+  radio.openReadingPipe(1,pipe); //Можно открыть все трубы разом.
+  radio.startListening(); //включаем приемник и начинаем слушать трубу.
+  Serial.print("Initializing SD card...");
+  pinMode(6, OUTPUT);
+  if (!SD.begin(chipSelect)) {
+    Serial.println("initialization failed!");
+    return;
+  }
+  Serial.println("initialization done.");
 } 
 
 
-
-
 void loop(){ 
-  ds.requestTemperatures(); // считываем температуру с датчиков
   float data [5];  //создаем массив из 2-х переменных.
-  data[0] = float(ds.getTempC(sensor1)); //присваиваем первому значению массива данные с sensor1 (за один раз можно отправить до 32 байт).
-  data[1] = float(ds.getTempC(sensor2));//присваиваем второму значению массива данные с sensor2 (за один раз можно отправить до 32 байт).
-  data[2] = float(ds.getTempC(sensor3));
-  data[3] = float(ds.getTempC(sensor4));
-  data[4] = float(ds.getTempC(sensor5));
-  radio.write(&data, sizeof(data)); // передаем массив и его размер.
+  if (radio.available()){ //проверяем не пришло ли чего в буфер.
+  radio.read(&data, sizeof(data)); //читаем массив и указываем сколько пришло.
    Serial.println(data[0]); //выводим данные в сериал порт для проверки.
    Serial.println(data[1]); //выводим данные в сериал порт для проверки.
    Serial.println(data[2]);
    Serial.println(data[3]);
-   Serial.println(data[4]); //выводим данные в сериал порт для проверки.
-   Serial.println(); //пробел.
-   delay(500); //ждем пол секунды. 
-
+   Serial.println(data[4]);
+   Serial.println(); //пробел. 
+    time = time + 1;
+    dataFile = SD.open("temp1.txt", FILE_WRITE);
+  if (dataFile) {
+    dataFile.print(data[0]);
+    dataFile.print(";");
+    dataFile.print(data[1]);
+    dataFile.print(";");
+    dataFile.print(data[2]);
+    dataFile.print(";");
+    dataFile.print(data[3]);
+    dataFile.print(";");
+    dataFile.print(data[4]);
+    dataFile.print(";");
+    Serial.print("ok tempreture.txt");
+    dataFile.close();
+    Serial.println("done.");
+  }
+  else{
+    Serial.println("nope no datafile");
+  }
+  }
 }
